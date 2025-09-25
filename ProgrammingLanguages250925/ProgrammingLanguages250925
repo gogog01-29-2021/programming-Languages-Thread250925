@@ -1,0 +1,63 @@
+Method call as Two events(Invocation, Response// return) 
+
+//Task
+Embarrassingly parallel (no communication, no shared state)
+Per-image filters, per-file compression, Monte Carlo trials, parameter sweeps, Ray tracing samples.
+Speedup limited mostly by cores and memory bandwidth.
+Coarse-grained tasks with rare sync
+Batch matrix multiplies with blocking, large FFTs (parallel stages), map→reduce with big partitions, training mini-batches.
+I/O-bound concurrency
+Network servers, web scrapers, log ingesters. Threads hide latency while sockets/disks stall. Even better: async event loops.
+Sharded ownership
+HFT/DB/queues: one core per symbol/partition/queue, no cross-talk. Coordination happens at boundaries, not per operation.
+//Threads are state Machines, Events are Transition
+Thread={Assign to shared variable
+Assign to local variable
+Invoke method
+Return from method
+
+}
+
+Datastructure
+
+Precondition:
+Queue is non-empty
+Postcondition:
+Returns first item in queue     //Method call    q.enque()   reyrns void
+//In sequential:Q.   IN concurrent:collision->Method call is not an event but Interval
+
+Postcondition:
+Removes first item in queue
+
+
+Algorithm
+
+
+
+
+void primePrint {
+  int i = ThreadID.get(); // IDs in {0..9}
+  for (j = i*109+1, j<(i+1)*109; j++) {
+    if (isPrime(j))
+      print(j);
+  }
+}
+
+#Task: Checking prime number
+Counter counter = new Counter(1);
+    
+void primePrint {
+  long j = 0;
+  while (j < 1010) {
+    j = counter.getAndIncrement();
+    if (isPrime(j))
+      print(j);
+  }
+}
+
+
+Linearizability: 
+•Each method should
+–“take effect”
+–Instantaneously
+–Between invocation and response events
