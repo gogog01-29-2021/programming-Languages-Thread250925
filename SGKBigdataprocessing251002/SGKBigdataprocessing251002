@@ -1,0 +1,8 @@
+Homework: Performance Evaluation of Lock Mechanisms
+Objective
+This assignment aims to compare the performance of different locking mechanisms—TAS, TTAS, and Backoff lock—when used with multiple threads. You will implement each lock mechanism and conduct experiments to analyze their performance under varying thread counts and critical section load.
+Problem
+Implement a multithreaded program that adds integers starting from 1,000,000 to 5,000,000. Use shared ticket with No Lock, Spinlock, TAS, TTAS, and Backoff Lock. Write a report (3-5 pages) focusing on the performance and correctness. 
+Multithreading Setup
+Use a threading library, such as POSIX threads (pthread) in C/C++, or a similar multithreading framework.
+Vary the number of threads (e.g., 2, 4, 8, 16, 32) and measure the performance for each lock mechanism.
