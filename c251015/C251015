@@ -1,0 +1,18 @@
+A dynamic filter in C usually involves:
+
+Structs to define filter state.
+Dynamic memory allocation (malloc, free) to manage filter data.
+Runtime flexibility to change filter behavior or parameters.
+  typedef struct {
+    float *buffer;
+    int size;
+    int index;
+} DynamicFilter;
+
+DynamicFilter* create_filter(int size) {
+    DynamicFilter *filter = malloc(sizeof(DynamicFilter));
+    filter->buffer = calloc(size, sizeof(float));
+    filter->size = size;
+    filter->index = 0;
+    return filter;
+}
