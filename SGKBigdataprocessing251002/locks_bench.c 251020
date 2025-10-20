@@ -1,0 +1,342 @@
+// lock_bench.c
+// Compare: nolock, pthread spinlock, TAS, TTAS, Backoff (TTAS + exp backoff)
+
+#define _GNU_SOURCE
+#include <stdatomic.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+#include <sched.h>
+
+#ifndef MIN
+#define MIN(a,b) ((a)<(b)?(a):(b))
+#endif
+
+// ----- CPU relax primitive (x86 pause if available) -----
+static inline void cpu_relax(void) {
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ __volatile__("pause");
+#else
+    // Portable-ish fallback: yield to scheduler
+    sched_yield();
+#endif
+}
+
+// ----- Benchmark parameters -----
+static const uint64_t START_N = 1000000ULL;
+static const uint64_t END_N   = 5000000ULL;  // inclusive
+
+typedef struct lock_vtable {
+    const char *name;
+    void (*init)(void *);
+    void (*destroy)(void *);
+    void (*lock)(void *);
+    void (*unlock)(void *);
+} lock_vtable;
+
+// ----------------- No-lock (baseline WRONG) -----------------
+typedef struct { int dummy; } nolock_t;
+
+static void nl_init(void *s)    {(void)s;}
+static void nl_destroy(void *s) {(void)s;}
+static void nl_lock(void *s){ (void)s; }
+static void nl_unlock(void *s){ (void)s; }
+
+static lock_vtable NLOCK = {
+    .name = "nolock",
+    .init = nl_init, .destroy = nl_destroy,
+    .lock = nl_lock, .unlock = nl_unlock
+};
+
+// ----------------- pthread spinlock -----------------
+typedef struct { pthread_spinlock_t l; } spin_t;
+
+static void sp_init(void *s){ pthread_spin_init(&((spin_t*)s)->l, PTHREAD_PROCESS_PRIVATE); }
+static void sp_destroy(void *s){ pthread_spin_destroy(&((spin_t*)s)->l); }
+static void sp_lock(void *s){ pthread_spin_lock(&((spin_t*)s)->l); }
+static void sp_unlock(void *s){ pthread_spin_unlock(&((spin_t*)s)->l); }
+
+static lock_vtable SPIN = {
+    .name = "spin",
+    .init = sp_init, .destroy = sp_destroy,
+    .lock = sp_lock, .unlock = sp_unlock
+};
+
+// ----------------- TAS (test-and-set) -----------------
+typedef struct { atomic_flag flag; } tas_t;
+
+static void tas_init(void *s){ atomic_flag_clear(&((tas_t*)s)->flag); }
+static void tas_destroy(void *s){ (void)s; }
+static void tas_lock(void *s){
+    tas_t *t = (tas_t*)s;
+    while (atomic_flag_test_and_set_explicit(&t->flag, memory_order_acquire)) {
+        cpu_relax();
+    }
+}
+static void tas_unlock(void *s){
+    tas_t *t = (tas_t*)s;
+    atomic_flag_clear_explicit(&t->flag, memory_order_release);
+}
+
+static lock_vtable TAS = {
+    .name = "tas",
+    .init = tas_init, .destroy = tas_destroy,
+    .lock = tas_lock, .unlock = tas_unlock
+};
+
+// ----------------- TTAS (test-test-and-set) -----------------
+typedef struct { atomic_bool state; } ttas_t;
+
+static void ttas_init(void *s){ atomic_store(&((ttas_t*)s)->state, false); }
+static void ttas_destroy(void *s){ (void)s; }
+static void ttas_lock(void *s){
+    ttas_t *t = (ttas_t*)s;
+    for(;;){
+        // First just read until it looks free (shared line remains read-mostly)
+        while (atomic_load_explicit(&t->state, memory_order_relaxed)) {
+            cpu_relax();
+        }
+        // Then try to grab exclusively
+        if (!atomic_exchange_explicit(&t->state, true, memory_order_acquire))
+            break;
+        cpu_relax();
+    }
+}
+static void ttas_unlock(void *s){
+    ttas_t *t = (ttas_t*)s;
+    atomic_store_explicit(&t->state, false, memory_order_release);
+}
+
+static lock_vtable TTAS = {
+    .name = "ttas",
+    .init = ttas_init, .destroy = ttas_destroy,
+    .lock = ttas_lock, .unlock = ttas_unlock
+};
+
+// ----------------- Backoff (TTAS + exponential backoff with jitter) -----------------
+typedef struct {
+    atomic_bool state;
+    unsigned min_wait;
+    unsigned max_wait;
+} backoff_t;
+
+// Simple xorshift PRNG for per-thread jitter (avoid synchronized rand())
+static __thread uint32_t rng_state = 0;
+static inline uint32_t xorshift32(void) {
+    if (rng_state == 0) rng_state = (uint32_t)pthread_self(); // seed once per thread
+    uint32_t x = rng_state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    rng_state = x;
+    return x;
+}
+
+static void bo_init(void *s){
+    backoff_t *b = (backoff_t*)s;
+    atomic_store(&b->state, false);
+    b->min_wait = 64;      // tuned by taste
+    b->max_wait = 8192;    // sane cap
+}
+static void bo_destroy(void *s){ (void)s; }
+static void spin_wait(unsigned iters){
+    for (unsigned i = 0; i < iters; ++i) cpu_relax();
+}
+static void bo_lock(void *s){
+    backoff_t *b = (backoff_t*)s;
+    unsigned wait = b->min_wait;
+    for(;;){
+        // Read-spin while it looks taken (shared load, cheap)
+        while (atomic_load_explicit(&b->state, memory_order_relaxed)) {
+            unsigned jitter = xorshift32() % wait;
+            spin_wait((wait >> 1) + jitter);
+            wait = MIN(wait << 1, b->max_wait);
+        }
+        // Try to grab exclusively
+        if (!atomic_exchange_explicit(&b->state, true, memory_order_acquire))
+            break;
+
+        // Failed: back off with jitter
+        unsigned jitter = xorshift32() % wait;
+        spin_wait(wait + jitter);
+        wait = MIN(wait << 1, b->max_wait);
+    }
+}
+static void bo_unlock(void *s){
+    backoff_t *b = (backoff_t*)s;
+    atomic_store_explicit(&b->state, false, memory_order_release);
+}
+
+static lock_vtable BACKOFF = {
+    .name = "backoff",
+    .init = bo_init, .destroy = bo_destroy,
+    .lock = bo_lock, .unlock = bo_unlock
+};
+
+// ----- Critical-section "work" to vary contention -----
+static inline void critical_work(unsigned iters){
+    // Pure compute; simulates small artificial CS load
+    volatile unsigned x = 0;
+    for (unsigned i=0; i<iters; ++i) x += i;
+    (void)x;
+}
+
+// ----- Shared state for the benchmark -----
+typedef struct {
+    lock_vtable *vt;
+    void *impl;
+    unsigned cs_iters;
+    unsigned chunk_size;
+    uint64_t next_ticket;   // shared ticket counter
+    uint64_t *partial_sums; // per-thread partial sums
+} bench_t;
+
+typedef struct {
+    bench_t *B;
+    int tid;
+} arg_t;
+
+// Worker: acquire lock briefly to claim a chunk, then sum OUTSIDE the lock
+static void* worker(void *arg){
+    arg_t *A = (arg_t*)arg;
+    bench_t *B = A->B;
+    uint64_t local_sum = 0;
+
+    for(;;){
+        // Lock briefly to claim a range of work
+        B->vt->lock(B->impl);
+
+        // Small artificial CS load (tunable via -w)
+        critical_work(B->cs_iters);
+
+        uint64_t my_begin = B->next_ticket;
+        if (my_begin > END_N) {
+            B->vt->unlock(B->impl);
+            break;
+        }
+
+        B->next_ticket += B->chunk_size;
+        uint64_t my_end = (B->next_ticket - 1 > END_N) ? END_N : (B->next_ticket - 1);
+
+        B->vt->unlock(B->impl);
+
+        // Heavy summation work OUTSIDE the lock
+        for (uint64_t x = my_begin; x <= my_end; ++x) {
+            local_sum += x;
+        }
+    }
+
+    // Store this thread's partial sum
+    B->partial_sums[A->tid] = local_sum;
+    return NULL;
+}
+
+static uint64_t expected_sum(uint64_t a, uint64_t b){
+    uint64_t n = b - a + 1;
+    // n*(a+b)/2 fits in 64-bit here
+    return (n * (a + b)) / 2;
+}
+
+static double now_sec(void){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec*1e-9;
+}
+
+// ----- tiny allocator for lock impls -----
+static void* alloc_lock_storage(const char *kind){
+    if      (!kind) return NULL;
+    else if (!strcmp(kind,"nolock"))  return calloc(1,sizeof(nolock_t));
+    else if (!strcmp(kind,"spin"))    return calloc(1,sizeof(spin_t));
+    else if (!strcmp(kind,"tas"))     return calloc(1,sizeof(tas_t));
+    else if (!strcmp(kind,"ttas"))    return calloc(1,sizeof(ttas_t));
+    else if (!strcmp(kind,"backoff")) return calloc(1,sizeof(backoff_t));
+    return NULL;
+}
+static lock_vtable* pick_vt(const char *kind){
+    if      (!strcmp(kind,"nolock"))  return &NLOCK;
+    else if (!strcmp(kind,"spin"))    return &SPIN;
+    else if (!strcmp(kind,"tas"))     return &TAS;
+    else if (!strcmp(kind,"ttas"))    return &TTAS;
+    else if (!strcmp(kind,"backoff")) return &BACKOFF;
+    fprintf(stderr, "Unknown lock kind: %s\n", kind);
+    exit(2);
+}
+
+int main(int argc, char **argv){
+    // Default parameters
+    const char *lock_kind = "nolock";
+    int num_threads = 4;
+    unsigned chunk_size = 1000;
+    unsigned cs_iters = 0;
+
+    // Parse flags: -l <lock> -t <threads> -c <chunk> -w <work_iters>
+    int opt;
+    while ((opt = getopt(argc, argv, "l:t:c:w:")) != -1) {
+        switch (opt) {
+            case 'l': lock_kind = optarg; break;
+            case 't': num_threads = atoi(optarg); break;
+            case 'c': chunk_size = (unsigned)atoi(optarg); break;
+            case 'w': cs_iters = (unsigned)atoi(optarg); break;
+            default:
+                fprintf(stderr, "Usage: %s -l <nolock|spin|tas|ttas|backoff> -t <threads> -c <chunk> -w <cs_iters>\n", argv[0]);
+                return 1;
+        }
+    }
+
+    lock_vtable *vt = pick_vt(lock_kind);
+    void *impl = alloc_lock_storage(lock_kind);
+    vt->init(impl);
+
+    // Allocate per-thread partial sums
+    uint64_t *partial_sums = (uint64_t*)calloc(num_threads, sizeof(uint64_t));
+
+    bench_t B = {
+        .vt = vt,
+        .impl = impl,
+        .cs_iters = cs_iters,
+        .chunk_size = chunk_size,
+        .next_ticket = START_N,
+        .partial_sums = partial_sums
+    };
+
+    pthread_t *th = (pthread_t*)malloc(sizeof(pthread_t) * num_threads);
+    arg_t *args = (arg_t*)malloc(sizeof(arg_t) * num_threads);
+
+    double t0 = now_sec();
+    for (int i = 0; i < num_threads; i++){
+        args[i].B = &B;
+        args[i].tid = i;
+        pthread_create(&th[i], NULL, worker, &args[i]);
+    }
+    for (int i = 0; i < num_threads; i++) {
+        pthread_join(th[i], NULL);
+    }
+    double t1 = now_sec();
+
+    // Reduce partial sums
+    uint64_t total_sum = 0;
+    for (int i = 0; i < num_threads; i++) {
+        total_sum += partial_sums[i];
+    }
+
+    uint64_t expect = expected_sum(START_N, END_N);
+    int ok = (total_sum == expect);
+
+    printf("lock=%s threads=%d chunk=%u cs_iters=%u  time=%.3f s  sum=%llu  %s\n",
+           vt->name, num_threads, chunk_size, cs_iters, (t1 - t0),
+           (unsigned long long)total_sum,
+           ok ? "[OK]" : "[WRONG]");
+
+    vt->destroy(impl);
+    free(impl);
+    free(partial_sums);
+    free(th);
+    free(args);
+    return ok ? 0 : 3;
+}
