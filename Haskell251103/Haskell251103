@@ -27,3 +27,42 @@ head' (x:_) = x
 firstLetter :: String -> String
 firstLetter "" = "Empty string!"
 firstLetter all@(x:xs) = "The first letter of " ++ all ++ " is " ++ [x]
+
+-- Guards with multiple parameters
+bmiTell :: Double -> String
+bmiTell bmi
+    | bmi <= 18.5 = "Underweight"
+    | bmi <= 25.0 = "Normal"
+    | bmi <= 30.0 = "Overweight"
+    | otherwise   = "Obese"
+
+max' :: Ord a => a -> a -> a
+max' a b
+    | a <= b    = b
+    | otherwise = a
+--where Bindings
+bmiTell :: Double -> Double -> String
+bmiTell weight height
+    | bmi <= skinny = "Underweight"
+    | bmi <= normal = "Normal"
+    | bmi <= fat    = "Overweight"
+    | otherwise     = "Obese"
+    where bmi = weight / height ^ 2
+          skinny = 18.5
+          normal = 25.0
+          fat = 30.0
+
+-- Pattern matching in where
+where bmi = weight / height ^ 2
+      (skinny, normal, fat) = (18.5, 25.0, 30.0)
+
+--let bindings
+-- let in expressions
+cylinder :: Double -> Double -> Double
+cylinder r h =
+    let sideArea = 2 * pi * r * h
+        topArea = pi * r ^ 2
+    in sideArea + 2 * topArea
+
+-- let in list comprehensions
+[bmi | (w, h) <- xs, let bmi = w / h ^ 2, bmi > 25.0]
