@@ -75,3 +75,49 @@ describeList :: [a] -> String
 describeList ls = "The list is " ++ case ls of []  -> "empty."
                                                  [x] -> "a singleton list."
                                                  xs  -> "a longer list."
+
+
+
+
+--ch4 Recursion
+-- Maximum of a list
+maximum' :: Ord a => [a] -> a
+maximum' [] = error "maximum of empty list!"
+maximum' [x] = x
+maximum' (x:xs) = max x (maximum' xs)
+
+-- Replicate
+replicate' :: Int -> a -> [a]
+replicate' n x
+    | n <= 0    = []
+    | otherwise = x : replicate' (n-1) x
+
+-- Take
+take' :: Int -> [a] -> [a]
+take' n _
+    | n <= 0   = []
+take' _ []     = []
+take' n (x:xs) = x : take' (n-1) xs
+
+-- Reverse
+reverse' :: [a] -> [a]
+reverse' [] = []
+reverse' (x:xs) = reverse' xs ++ [x]
+
+-- Repeat (infinite list)
+repeat' :: a -> [a]
+repeat' x = x : repeat' x
+
+-- Zip
+zip' :: [a] -> [b] -> [(a,b)]
+zip' _ [] = []
+zip' [] _ = []
+zip' (x:xs) (y:ys) = (x,y) : zip' xs ys
+
+-- QuickSort
+quicksort :: Ord a => [a] -> [a]
+quicksort [] = []
+quicksort (x:xs) =
+    let smallerOrEqual = [a | a <- xs, a <= x]
+        larger = [a | a <- xs, a > x]
+    in quicksort smallerOrEqual ++ [x] ++ quicksort larger
