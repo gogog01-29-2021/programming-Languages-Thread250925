@@ -121,3 +121,10 @@ quicksort (x:xs) =
     let smallerOrEqual = [a | a <- xs, a <= x]
         larger = [a | a <- xs, a > x]
     in quicksort smallerOrEqual ++ [x] ++ quicksort larger
+
+
+
+
+--ch5 Higher order function
+
+
