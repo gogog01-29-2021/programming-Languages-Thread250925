@@ -1,3 +1,32 @@
+//Single Threading
+import math
+
+def isprime(n):
+    # Returns True if n is prime and false otherwise
+    if not isinstance(n, int):
+        raise TypeError('not int')
+    if n < 2:
+        return False
+    if n == 2:
+        return True
+    max = int(math.ceil(math.sqrt(n)))
+    i = 2
+    while i <= max:
+        if n % i == 0:
+            return False
+        i += 1
+    return True
+
+def sum_primes(n):
+    # Calculates sum of all primes below given integer n
+    # Range start from 2 to n, check is prime
+    return sum([x for x in xrange(2, n) if isprime(x)])
+
+for i in xrange(100000, 5000000, 100000):
+    print sum_primes(i)
+
+
+
 //Multi Threading
 from threading import Thread
 from Queue import Queue, Empty
