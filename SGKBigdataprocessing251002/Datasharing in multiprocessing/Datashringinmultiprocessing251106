@@ -144,6 +144,25 @@ with open("test2.txt", "wb") as fid:
 
 
 //MPI
+brew install openmpi
+pip install mpi4py
+pip install ipyparallel
+import ipyparallel as ipp
+
+rc = ipp.Cluster(engines='mpi', n=4).start_and_connect_sync()
+rc.wait_for_engines(4)
+
+view = rc[:]
+view.activate()
+
+
+%%px --block
+# MPI initialization, library imports and sanity checks on all engines
+from mpi4py import MPI
+
+mpi = MPI.COMM_WORLD
+print("MPI rank: %i/%i" % (mpi.rank,mpi.size))
+
 
 
 
