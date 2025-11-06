@@ -33,3 +33,107 @@ print(A)
 
 
 
+
+//FIFO queue API
+from multiprocessing import Process, Queue
+
+queue = Queue()
+
+queue = Queue(maxsize=100)
+
+
+queue.put(item)
+
+queue.put(item, block=True, timeout=None)
+
+
+Item = queue.get()
+
+
+size = queue.qsize()
+
+If queue.empty()
+
+
+
+//FIFO Queue
+import multiprocessing
+
+
+def is_even(numbers, q):
+    for n in numbers:
+        if n % 2 == 0:
+            q.put(n)
+
+
+q = multiprocessing.Queue()
+p = multiprocessing.Process(target=is_even, args=(range(20), q))
+
+p.start()
+p.join()
+
+while q:
+    print q.get()
+
+
+
+
+//pipe
+from multiprocessing import Process, Pipe
+
+
+def f(conn):
+    conn.send(['hello world'])
+    conn.close()
+
+
+parent_conn, child_conn = Pipe()
+p = Process(target=f, args=(child_conn, ))
+p.start()
+print parent_conn.recv()
+p.join()
+
+
+
+
+
+////shared memory
+# In the first Python interactive shell 
+import numpy as np 
+a = np.array([1, 1, 2, 3, 5, 8]) 
+# Start with an existing NumPy array 
+from multiprocessing import shared_memory 
+shm = shared_memory.SharedMemory(create=True, size=a.nbytes)
+# Now create a NumPy array backed by shared memory 
+b = np.ndarray(a.shape, dtype=a.dtype, buffer=shm.buf) 
+b[:] = a[:]  //Array int pointer are pointing same content.  Buffer=shm.buf
+# Copy the original data into shared memory 
+>>> b array([1, 1, 2, 3, 5, 8])
+
+# In either the same shell or a new Python shell on the same machine 
+import numpy as np 
+from multiprocessing import shared_memory 
+# Attach to the existing shared memory block 
+existing_shm = shared_memory.SharedMemory(name='psm_21467_46075’) 
+# Note that a.shape is (6,) and a.dtype is np.int64 in this example 
+c = np.ndarray((6,), dtype=np.int64, buffer=existing_shm.buf) 
+c 
+>>> array([1, 1, 2, 3, 5, 8]) 
+c[-1] = 888 
+>>> c array([ 1, 1, 2, 3, 5, 888]) 
+
+
+
+//FIle based sharing
+import numpy as np 
+a = np.array([1, 1, 2, 3, 5, 8]) 
+
+#Using numpy library
+np.savetxt('test.out’, a, delimiter=',’) 
+
+#Using OS version
+with open("test2.txt", "wb") as fid: 
+   a = np.array([[1, 2], [3, 4]]) 
+   fid.write(a.astype("float64"))
+
+
