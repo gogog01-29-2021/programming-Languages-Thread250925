@@ -1,0 +1,35 @@
+"""
+
+Single machine
+Queue
+Pipes
+
+Multiple machine
+MPI
+File-based communication
+
+"""
+
+//Queue
+import os, math
+from multiprocessing import Process
+
+A=[0,0,0,0]
+
+def my_function(i):
+	A[i]=A[i]+1
+	return
+
+list_of_procs = []
+for r in range(4):
+	p = Process(target=my_function, args=(r,))  list_of_procs.append(p)
+	p.start()
+	
+#Waits until end of all processes
+for p in list_of_procs:
+	p.join()
+
+print(A)
+
+
+
