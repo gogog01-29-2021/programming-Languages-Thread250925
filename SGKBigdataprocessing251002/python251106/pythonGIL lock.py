@@ -9,6 +9,8 @@ Experimental setup
 8 GB ram
 Python 2.6
 
+1.Multi Threading
+2.Multi processing Library
 """
 
 
