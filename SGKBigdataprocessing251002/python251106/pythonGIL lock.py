@@ -1,3 +1,20 @@
+"""
+Problem Formulation & set up 
+Example: Crunching Primes
+
+Sum all of the prime numbers in range of integers starting from 1,000,000 to 5,000,000
+
+Experimental setup
+8 Core Mac Pro
+8 GB ram
+Python 2.6
+
+"""
+
+
+
+
+
 //Single Threading
 import math
 
