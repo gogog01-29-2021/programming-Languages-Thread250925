@@ -8,6 +8,10 @@ Multiple machine
 MPI
 File-based communication
 
+Multithreading data flow: directly read/write the same objects; protect with locks. Optional: queue.Queue for clean producer→consumer.
+
+Multiprocessing data flow: nothing is shared unless you choose one: multiprocessing.Queue/Pipe/shared_memory/Array/Value (or files/MPI).
+
 """
 
 //Queue
