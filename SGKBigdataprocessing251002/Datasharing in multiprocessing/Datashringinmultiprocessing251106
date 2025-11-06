@@ -141,3 +141,10 @@ with open("test2.txt", "wb") as fid:
    fid.write(a.astype("float64"))
 
 
+
+
+//MPI
+
+
+
+
