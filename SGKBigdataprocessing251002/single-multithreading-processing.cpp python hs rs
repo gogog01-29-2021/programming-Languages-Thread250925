@@ -1,0 +1,365 @@
+"""
+Problem Formulation & set up 
+Example: Crunching Primes
+
+Sum all of the prime numbers in range of integers starting from 1,000,000 to 5,000,000
+
+Experimental setup
+8 Core Mac Pro
+8 GB ram
+Python 2.6
+
+1.Multi Threading
+2.Multi processing Library
+"""
+
+
+
+
+
+//Single Threading
+import math
+
+def isprime(n):
+    # Returns True if n is prime and false otherwise
+    if not isinstance(n, int):
+        raise TypeError('not int')
+    if n < 2:
+        return False
+    if n == 2:
+        return True
+    max = int(math.ceil(math.sqrt(n)))
+    i = 2
+    while i <= max:
+        if n % i == 0:
+            return False
+        i += 1
+    return True
+
+def sum_primes(n):
+    # Calculates sum of all primes below given integer n
+    # Range start from 2 to n, check is prime
+    return sum([x for x in xrange(2, n) if isprime(x)])
+
+for i in xrange(100000, 5000000, 100000):
+    print sum_primes(i)
+
+
+
+//Multi Threading
+from threading import Thread
+from Queue import Queue, Empty
+
+def do_work(q):
+    while True:
+        try:
+            x = q.get(block=False)
+            print sum_primes(x)
+        except Empty:
+            break
+
+#main function
+work_queue = Queue()
+for i in xrange(100000, 5000000, 100000):
+    work_queue.put(i)
+
+threads = [Thread(target=do_work, args=(work_queue, )) for i in
+           range(8)]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+
+
+
+
+
+
+
+
+
+
+
+
+//Multi processing
+from multiprocessing import Process, Queue
+from Queue import Empty
+
+work_queue = Queue()
+for i in xrange(100000, 5000000, 100000):
+    work_queue.put(i)
+
+processes = [Process(target=do_work, args=(work_queue, )) for i in range(8)]
+for p in processes:
+    p.start()
+for p in processes:
+    p.join()
+
+
+
+//c++17
+      // primes.hpp
+#pragma once
+#include <cmath>
+#include <cstdint>
+
+inline bool is_prime(uint64_t n){
+    if(n < 2) return false;
+    if(n % 2 == 0) return n == 2;
+    for(uint64_t d=3; d*d<=n; d+=2) if(n % d == 0) return false;
+    return true;
+}
+inline uint64_t sum_primes_to(uint64_t N){
+    uint64_t s = 0;
+    for(uint64_t x=2; x<=N; ++x) if(is_prime(x)) s += x;
+    return s;
+}
+// single.cpp
+#include <iostream>
+#include <vector>
+#include "primes.hpp"
+int main(){
+    for (uint64_t i=100000; i<=5000000; i+=100000)
+        std::cout << i << " " << sum_primes_to(i) << "\n";
+}
+
+// mt.cpp
+#include <iostream>
+#include <vector>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include "primes.hpp"
+
+int main(){
+    std::vector<uint64_t> work; 
+    for (uint64_t i=100000; i<=5000000; i+=100000) work.push_back(i);
+
+    std::atomic<size_t> next{0};
+    std::mutex out_m;
+    const unsigned W = std::thread::hardware_concurrency();
+    std::vector<std::thread> th;
+
+    for(unsigned w=0; w<W; ++w){
+        th.emplace_back([&]{
+            while(true){
+                size_t i = next.fetch_add(1);
+                if(i >= work.size()) break;
+                auto N = work[i];
+                auto s = sum_primes_to(N);
+                std::lock_guard<std::mutex> lk(out_m);
+                std::cout << N << " " << s << "\n";
+            }
+        });
+    }
+    for(auto& t: th) t.join();
+}
+
+// mp.cpp
+#include <unistd.h>
+#include <sys/wait.h>
+#include <vector>
+#include <iostream>
+#include <cstdint>
+#include "primes.hpp"
+
+int main(){
+    std::vector<uint64_t> work;
+    for (uint64_t i=100000; i<=5000000; i+=100000) work.push_back(i);
+
+    const int W = std::min<int>(std::thread::hardware_concurrency(), 8);
+    int fds[2]; pipe(fds); // parent reads fds[0]
+
+    for(int w=0; w<W; ++w){
+        pid_t pid = fork();
+        if(pid==0){
+            // child: compute every W-th item starting at w
+            close(fds[0]); // close read end
+            for(size_t i=w; i<work.size(); i+=W){
+                uint64_t N = work[i], s = sum_primes_to(N);
+                write(fds[1], &N, sizeof(N));
+                write(fds[1], &s, sizeof(s));
+            }
+            _exit(0);
+        }
+    }
+    close(fds[1]); // parent: close write end
+    for(size_t k=0; k<work.size(); ++k){
+        uint64_t N,s; read(fds[0], &N, sizeof(N)); read(fds[0], &s, sizeof(s));
+        std::cout << N << " " << s << "\n";
+    }
+    while(wait(nullptr)>0) {}
+}
+
+
+
+
+//Rust
+// src/lib.rs
+pub fn is_prime(n: u64) -> bool {
+    if n < 2 { return false; }
+    if n % 2 == 0 { return n == 2; }
+    let mut d = 3u64;
+    while d*d <= n { if n % d == 0 { return false; } d += 2; }
+    true
+}
+pub fn sum_primes_to(n: u64) -> u64 {
+    (2..=n).filter(|&x| is_prime(x)).sum()
+}
+
+//single thread
+// src/bin/single.rs
+use primes::*;
+fn main() {
+    for n in (100_000..=5_000_000).step_by(100_000) {
+        println!("{n} {}", sum_primes_to(n));
+    }
+}
+
+
+//multi thread
+// src/bin/mt.rs
+use primes::*;
+use std::{sync::{Arc, atomic::{AtomicUsize, Ordering}, Mutex}, thread};
+
+fn main() {
+    let work: Vec<u64> = (100_000..=5_000_000).step_by(100_000).collect();
+    let next = Arc::new(AtomicUsize::new(0));
+    let out = Arc::new(Mutex::new(()));
+
+    let w = thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
+    let mut handles = Vec::new();
+
+    for _ in 0..w {
+        let work = work.clone();
+        let next = next.clone();
+        let out = out.clone();
+        handles.push(thread::spawn(move || {
+            loop {
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                if i >= work.len() { break; }
+                let n = work[i];
+                let s = sum_primes_to(n);
+                let _g = out.lock().unwrap();
+                println!("{n} {s}");
+            }
+        }));
+    }
+    for h in handles { h.join().unwrap(); }
+}
+
+
+// src/bin/mp.rs
+use primes::*;
+use nix::unistd::{fork, ForkResult, pipe, close, write, read, _exit};
+use std::thread;
+
+fn main() {
+    let work: Vec<u64> = (100_000..=5_000_000).step_by(100_000).collect();
+    let w = thread::available_parallelism().map(|n| n.get()).unwrap_or(8).min(8);
+    let (r, mut wfd);
+    let (rfd, wfd2) = pipe().unwrap(); r = rfd; wfd = wfd2;
+
+    for slot in 0..w {
+        match unsafe { fork() }.unwrap() {
+            ForkResult::Child => {
+                close(r).ok();
+                for (i, n) in work.iter().enumerate().filter(|(i, _)| i % w == slot) {
+                    let bytes = n.to_le_bytes();
+                    let s = sum_primes_to(*n).to_le_bytes();
+                    write(wfd, &bytes).ok(); write(wfd, &s).ok();
+                }
+                _exit(0);
+            }
+            ForkResult::Parent => {}
+        }
+    }
+    close(wfd).ok();
+    for _ in 0..work.len() {
+        let mut nb=[0u8;8]; let mut sb=[0u8;8];
+        read(r, &mut nb).unwrap(); read(r, &mut sb).unwrap();
+        let n = u64::from_le_bytes(nb); let s = u64::from_le_bytes(sb);
+        println!("{n} {s}");
+    }
+}
+
+
+
+//Haskell
+-- Prime.hs
+module Prime (isPrime, sumPrimesTo) where
+isPrime :: Int -> Bool
+isPrime n | n < 2 = False
+isPrime 2 = True
+isPrime n | even n = False
+isPrime n = go 3
+  where
+    go d | d*d > n      = True
+         | n `mod` d==0 = False
+         | otherwise    = go (d+2)
+
+sumPrimesTo :: Int -> Integer
+sumPrimesTo n = sum [ toInteger x | x <- [2..n], isPrime x ]
+
+//single
+-- single.hs
+import Prime
+main :: IO ()
+main = mapM_ (\n -> print (n, sumPrimesTo n)) [100000,200000..5000000]
+
+
+//multi threading
+-- mt.hs
+import Control.Concurrent (getNumCapabilities)
+import Control.Concurrent.Async (mapConcurrently_)
+import Control.Concurrent.MVar
+import Prime
+
+main :: IO ()
+main = do
+  let work = [100000,200000..5000000]
+  out <- newMVar ()
+  let worker n = do
+        let s = sumPrimesTo n
+        withMVar out $ \_ -> print (n, s)
+  _ <- mapConcurrently_ worker work  -- use +RTS -N to utilize cores
+  return ()
+
+
+//multi processing
+-- mp.hs
+import Prime
+import System.Posix.IO
+import System.Posix.Process
+import System.Posix.Types
+import Control.Monad
+import Data.Binary.Put
+import qualified Data.ByteString.Lazy as BL
+import Data.Binary.Get
+import Data.Word
+
+writeU64 :: Fd -> Word64 -> IO ()
+writeU64 fd x = void $ fdWrite fd (BL.unpack (runPut (putWord64le x)))
+readU64  :: Fd -> IO Word64
+readU64 fd = do bs <- fdRead fd 8
+                let lbs = BL.pack (fst bs)
+                return (runGet getWord64le lbs)
+
+main :: IO ()
+main = do
+  let work = [100000,200000..5000000]
+  (r,w) <- createPipe
+  caps <- getNumCapabilities
+  let W = min 8 caps
+  forM_ [0..W-1] $ \slot -> do
+    forkProcess $ do
+      closeFd r
+      forM_ (map snd . filter (\(i,_) -> i `mod` W == slot) $ zip [0..] work) $ \n -> do
+        let s = sumPrimesTo n
+        writeU64 w (fromIntegral n)
+        writeU64 w (fromIntegral s)
+      exitImmediately ExitSuccess
+  closeFd w
+  replicateM_ (length work) $ do
+    n <- readU64 r; s <- readU64 r
+    print (n, s)
