@@ -71,3 +71,70 @@ const data = await response.json();
 window.location.href = data.start_idv_uri;
 // → Browser navigates to external verification site
 ```
+
+```API components + Data Flow
+const response = await fetch(IDV_SERVER + `/idv/login-ticket`, {
+//    │         │     │         │              │
+//    │         │     │         │              └── API endpoint path
+//    │         │     │         └── Base server URL (environment variable)
+//    │         │     └── fetch() - browser's HTTP client function  
+//    │         └── await - wait for async operation to complete
+//    └── Store the response in 'response' variable
+
+  method: "POST",
+  //      │
+  //      └── HTTP method - sending data TO server (not getting)
+
+  headers: { 
+    "Content-Type": "application/json" 
+  },
+  //│                    │
+  //│                    └── Tell server: "I'm sending JSON data"
+  //└── HTTP headers - metadata about the request
+
+  body: JSON.stringify({ login_ticket: login_ticket }),
+  //    │              │               │
+  //    │              │               └── Variable containing the ticket value
+  //    │              └── JavaScript object to send
+  //    └── Convert object to JSON string for transmission
+
+  credentials: 'include'
+  //           │
+  //           └── Include cookies/session data in request
+});
+
+// 1. JavaScript constructs URL:
+const fullURL = IDV_SERVER + `/idv/login-ticket`
+// Result: "https://api.myserver.com/idv/login-ticket"
+
+// 2. Browser makes HTTP request (BEHIND THE SCENES):
+POST https://api.myserver.com/idv/login-ticket
+Content-Type: application/json
+Cookie: session_id=abc123; auth_token=xyz789
+
+{"login_ticket": "ticket_12345"}
+
+// 3. Server processes and responds:
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status": "ok", "message": "Ticket consumed successfully"}
+
+// 4. JavaScript receives response:
+const data = await response.json();
+console.log(data.status); // "ok"
+
+// Your React component is running on:
+// https://myapp.com/verification-page
+
+// 1. API Call happens in background:
+await fetch("https://api.server.com/idv/login-ticket", {
+  method: "POST",
+  body: JSON.stringify({ login_ticket: "abc123" })
+});
+// → No URL change, user still sees: https://myapp.com/verification-page
+
+// 2. After API success, THEN navigation happens:
+window.location.href = responseData.start_idv_uri;
+// → NOW browser navigates to: https://external-idv.com/verify/xyz789
+```
