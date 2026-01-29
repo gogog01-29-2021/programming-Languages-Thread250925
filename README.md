@@ -72,6 +72,157 @@ window.location.href = data.start_idv_uri;
 // → Browser navigates to external verification site
 ```
 
+```web design
+Complete Flow Diagram                                                
+                                                                       
+  ┌────────────────────────────────────────────────────────────────────
+  ─────────────┐                                                       
+  │                              USER'S BROWSER                        
+                │                                                      
+  │                                                                    
+                │                                                      
+  │  1. User visits:                                                   
+  https://idv-app.com/idv/jp?user_id=123&login_ticket=abc       │      
+  │                                                                    
+                │                                                      
+  │  2. React loads LiquidIDVCookie.tsx                                
+               │                                                       
+  │     ┌──────────────────────────────────────────────────────────────
+  ───────┐     │                                                       
+  │     │  useEffect() runs automatically                              
+          │     │                                                      
+  │     │                                                              
+          │     │                                                      
+  │     │  Step 1: consumeLoginTicket()                                
+          │     │                                                      
+  │     │          ↓                                                   
+          │     │                                                      
+  │     │                                                              
+  fetch("https://api.tomopayment.com/v1/idv/login-ticket")   │     │   
+  │     │                                                              
+          │     │                                                      
+  └─────┼──────────────────────────┬───────────────────────────────────
+  ────────┼─────┘                                                      
+                                   │                                   
+                                   │  POST { login_ticket: "abc" }     
+                                   │  (sends data TO server)           
+                                   ▼                                   
+  ┌────────────────────────────────────────────────────────────────────
+  ─────────────┐                                                       
+  │                              IDV-SERVER (Haskell)                  
+                │                                                      
+  │                                                                    
+                │                                                      
+  │  LoginTicket.hs receives the request                               
+               │                                                       
+  │  ┌─────────────────────────────────────────────────────────────────
+  ────────┐    │                                                       
+  │  │  1. Check if login_ticket "abc" is valid in database            
+          │    │                                                       
+  │  │  2. If valid → generate access_ticket cookie                    
+          │    │                                                       
+  │  │  3. Return { status: "ok" } + Set-Cookie header                 
+          │    │                                                       
+  │  └─────────────────────────────────────────────────────────────────
+  ────────┘    │                                                       
+  │                                                                    
+                │                                                      
+  └────────────────────────────────────────────────────────────────────
+  ─────────────┘                                                       
+                                   │                                   
+                                   │  Response: { status: "ok" }       
+                                   │  + cookie saved in browser        
+                                   ▼                                   
+  ┌────────────────────────────────────────────────────────────────────
+  ─────────────┐                                                       
+  │                              USER'S BROWSER                        
+                │                                                      
+  │     ┌──────────────────────────────────────────────────────────────
+  ───────┐     │                                                       
+  │     │  Step 1 SUCCESS! ✓                                           
+          │     │                                                      
+  │     │                                                              
+          │     │                                                      
+  │     │  Step 2: handleStartVerification()                           
+          │     │                                                      
+  │     │          ↓                                                   
+          │     │                                                      
+  │     │                                                              
+  fetch("https://api.tomopayment.com/v1/idv/jp/cookie/start")│     │   
+  │     │                                                              
+          │     │                                                      
+  └─────┼──────────────────────────┬───────────────────────────────────
+  ────────┼─────┘                                                      
+                                   │                                   
+                                   │  POST { user_id: "123", country:  
+  "jp" }                                                               
+                                   │  + cookie (automatic)             
+                                   ▼                                   
+  ┌────────────────────────────────────────────────────────────────────
+  ─────────────┐                                                       
+  │                              IDV-SERVER (Haskell)                  
+                │                                                      
+  │                                                                    
+                │                                                      
+  │  Start.hs receives the request                                     
+               │                                                       
+  │  ┌─────────────────────────────────────────────────────────────────
+  ────────┐    │                                                       
+  │  │  1. Verify cookie is valid                                      
+          │    │                                                       
+  │  │  2. Call Liquid (external company) API to create verification   
+  session  │    │                                                      
+  │  │  3. Get launch_url from Liquid                                  
+          │    │                                                       
+  │  │  4. Generate new URL:                                           
+  https://idv-app.com/idv/jp/launch?token=xyz      │    │              
+  │  │  5. Return { start_idv_uri:                                     
+  "https://idv-app.com/idv/jp/launch?token=xyz" }│ │                   
+  │  └─────────────────────────────────────────────────────────────────
+  ────────┘    │                                                       
+  │                                                                    
+                │                                                      
+  └────────────────────────────────────────────────────────────────────
+  ─────────────┘                                                       
+                                   │                                   
+                                   │  Response: { start_idv_uri:       
+  "https://..." }                                                      
+                                   ▼                                   
+  ┌────────────────────────────────────────────────────────────────────
+  ─────────────┐                                                       
+  │                              USER'S BROWSER                        
+                │                                                      
+  │     ┌──────────────────────────────────────────────────────────────
+  ───────┐     │                                                       
+  │     │  Step 2 SUCCESS! ✓                                           
+          │     │                                                      
+  │     │                                                              
+          │     │                                                      
+  │     │  Step 3: window.location.href = start_idv_uri                
+          │     │                                                      
+  │     │          ↓                                                   
+          │     │                                                      
+  │     │          Browser navigates to:                               
+  https://idv-app.com/idv/jp/launch... │     │                         
+  │     │          ↓                                                   
+          │     │                                                      
+  │     │          User sees Liquid's ID verification page             
+          │     │                                                      
+  │     │          ↓                                                   
+          │     │                                                      
+  │     │          User takes photo of ID, selfie, etc.                
+          │     │                                                      
+  │     │                                                              
+          │     │                                                      
+  │     └──────────────────────────────────────────────────────────────
+  ───────┘     │                                                       
+  │                                                                    
+                │                                                      
+  └────────────────────────────────────────────────────────────────────
+  ─────────────┘                                                       
+                                                                  
+```
+
 ```API components + Data Flow
 const response = await fetch(IDV_SERVER + `/idv/login-ticket`, {
 //    │         │     │         │              │
