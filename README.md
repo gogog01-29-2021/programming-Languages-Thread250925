@@ -1,8 +1,42 @@
 
+
+```
+
+Language	Interactive	Compile & Run
+Haskell	stack ghci + main	stack build + ./exe
+Python	python + main()	python main.py
+C/C++	gdb ./program	gcc main.c && ./a.out
+Rust	evcxr (3rd party)	cargo run
+
+```
+
 ```build  ghci+main for cpp and c and rust and python
 ghci+main for cpp and c and rust and python
 
-ghci+main for cpp and c and rust and python```
+# c & cpp
+gdb ./myprogram     # Debugger - can call functions
+lldb ./myprogram    # Alternative debugger
+
+# Or compile and run:
+gcc main.c -o main && ./main
+g++ main.cpp -o main && ./main
+
+# Rust
+cargo run           # Compile and run (like stack build + run)
+# No interactive interpreter built-in
+
+# But there's:
+evcxr               # Third-party Rust REPL
+
+#Python
+python              # Interactive interpreter (like ghci)
+>>> main()          # Call functions
+>>> import mymodule # Reload modules
+>>> exit()
+
+# Or run script:
+python main.py      # Like stack build + run
+```
 
 
 ```web
