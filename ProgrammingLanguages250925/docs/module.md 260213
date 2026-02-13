@@ -1,0 +1,17 @@
+from a.b.c import d
+
+```
+
+| Language     | Resolution Time | How module found      | Execution Time    |
+| ------------ | --------------- | --------------------- | ----------------- |
+| Python       | Runtime         | Filesystem + sys.path | Immediately       |
+| JS (Browser) | Runtime         | URL resolution        | After graph built |
+| JS (Node)    | Runtime         | Resolver algorithm    | After graph built |
+| Rust         | Compile time    | Module tree           | None at runtime   |
+| Haskell      | Compile time    | Interface files       | None at runtime   |
+| C            | Preprocessing   | Literal file include  | Compile/link time |
+| C++20        | Compile time    | Compiled module unit  | None at runtime   |
+
+
+
+```
